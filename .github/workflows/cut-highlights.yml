@@ -1,0 +1,60 @@
+name: Cut highlight clips
+
+# Downloads the YouTube video with yt-dlp, builds a scene-detection cut list,
+# cuts 20+ clips with ffmpeg, and uploads them as an artifact + a Release.
+# Runs automatically on push to main, or manually via "Run workflow".
+# Nothing is published to Instagram or anywhere else.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VIDEO_URL: https://youtu.be/kQeywW8-w20
+
+jobs:
+  cut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yt-dlp
+        run: |
+          python3 -m pip install --upgrade yt-dlp
+          ffmpeg -version | head -1
+          yt-dlp --version
+
+      - name: Download video (1080p max)
+        run: >
+          yt-dlp --remote-components ejs:github
+          -f "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]"
+          --merge-output-format mp4 -o video.mp4 "$VIDEO_URL"
+          && ls -lh video.mp4
+
+      - name: Build cut list (scene detection)
+        run: python3 scripts/make_cutlist.py video.mp4 cutlist.json
+
+      - name: Cut clips
+        run: |
+          python3 scripts/cut_clips.py video.mp4 cutlist.json clips/
+          ls -lh clips/ | head -40
+
+      - name: Upload clips artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gta6-highlights
+          path: clips/
+          retention-days: 30
+
+      - name: Publish Release with clips
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "highlights-run-${{ github.run_number }}" clips/*.mp4 \
+            --title "Highlight clips — run ${{ github.run_number }}" \
+            --notes "Auto-cut highlight clips from $VIDEO_URL (scene detection, fallback: even splits). See manifest.txt in the artifact for the clip list."
