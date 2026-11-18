@@ -32,6 +32,8 @@ jobs:
       - name: Download video (1080p max)
         run: >
           yt-dlp --remote-components ejs:github
+          --extractor-args "youtube:player_client=android,ios"
+          --retries 3 --retry-sleep 5
           -f "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]"
           --merge-output-format mp4 -o video.mp4 "$VIDEO_URL"
           && ls -lh video.mp4
